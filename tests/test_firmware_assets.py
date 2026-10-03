@@ -45,6 +45,8 @@ class FirmwareAssetsTests(unittest.TestCase):
         image = bytearray(256)
         image[0] = 0xE9
         image[12] = 9
+        protocol = b'/v1/highlights\0/v1/covers\0X-Book-Title\0X-Book-Author\0'
+        image[64:64 + len(protocol)] = protocol
         binary.write_bytes(image)
         self.binary = binary
         dep = self.source / '.pio/libdeps/example/Example'
@@ -102,6 +104,26 @@ class FirmwareAssetsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Invalid application'):
             assets.assemble(self.args)
         self.assertFalse(self.args.output.exists())
+
+    def test_highlights_only_firmware_cannot_package_without_cover_support(self):
+        image = bytearray(256)
+        image[0] = 0xE9
+        image[12] = 9
+        image[64:79] = b'/v1/highlights\0'
+        self.binary.write_bytes(image)
+        with self.assertRaisesRegex(ValueError, 'example_reader.*?/v1/covers, X-Book-Title, X-Book-Author'):
+            assets.assemble(self.args)
+        self.assertFalse(self.args.output.exists())
+
+    def test_every_protocol_marker_is_required_in_the_built_image(self):
+        original = self.binary.read_bytes()
+        for marker in (b'/v1/highlights', b'/v1/covers', b'X-Book-Title', b'X-Book-Author'):
+            with self.subTest(marker=marker):
+                self.binary.write_bytes(original.replace(marker, b'\0' * len(marker)))
+                with self.assertRaises(ValueError) as failure:
+                    assets.assemble(self.args)
+                self.assertIn('lacks required Passage protocol markers: ' + marker.decode('ascii'), str(failure.exception))
+                self.assertFalse(self.args.output.exists())
 
     def test_jpegdec_compiled_example_is_excluded_but_source_and_artifacts_are_preserved(self):
         dependency = self.source / '.pio/libdeps/example/JPEGDEC'

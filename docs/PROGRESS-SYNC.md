@@ -6,12 +6,12 @@ The Mac app includes a private KOSync-compatible service. KOReader on Kindle and
 
 1. In **Settings → Reading positions**, choose **Turn on position sync**. Reader Bridge starts the service and creates a dedicated local account.
 2. In **Setup → Reading positions**, close KOReader, connect Kindle in USB drive mode, and choose **Connect Kindle**. The app preserves its old settings, installs the Reader Bridge progress patch, and copies existing server positions for EPUBs on that Kindle. A current KOReader version with user patches enabled is required. It checks the old server before changing the account. Internet access is needed for this one-time copy if the old server is online.
-3. On your selected CrossPoint reader, open **File Transfer** on the same trusted network. Enter the shown address in Passage and choose **Connect reader**. Alternatively, connect its SD card and choose **Use its SD card instead**. No firmware change is needed for position sync if the reader already supports custom KOSync servers.
+3. Connect your selected CrossPoint reader in **USB drive mode**, or insert its SD card into the Mac. Choose its mounted folder in Passage and select **Connect reader**. Current CrossPoint firmware protects progress credentials from Wi-Fi file transfers. No firmware change is needed for position sync if the reader already supports custom KOSync servers.
 4. Eject Kindle and reopen KOReader. Restart Xteink so it loads the new settings. Keep the exact same EPUB bytes on both readers.
 
 Setup records the selected readers' pairings. **Readers paired** means settings are saved; received timestamps show actual uploads. Verify a physical round trip before relying on a two-reader connection. You can choose **Finish without position sync** and return later.
 
-Reader Bridge preserves KOReader's existing automatic-sync preferences. New configurations enable Auto sync; the reader's own Wi-Fi settings still apply. CrossPoint's Upload Local and Apply Remote actions remain manual. Choosing a new server does not add a polling loop, keep the readers' Wi-Fi on, change their sleep settings, or create Amazon Whispersync compatibility.
+Keep **Sync automatically** selected when connecting Kindle to sync on book open/close and sleep/wake. Passage also sets KOReader's **Action when Wi-Fi is off** to **Turn on**, which KOReader requires for automatic sync. Uncheck it for manual sync. Pairing backs up these settings and leaves Wi-Fi disconnect and sleep preferences unchanged. CrossPoint's Upload Local and Apply Remote actions remain manual. Position sync does not add a polling loop, keep Wi-Fi continuously on, or create Amazon Whispersync compatibility.
 
 ## Daily use
 
@@ -34,6 +34,8 @@ Conflicting queued positions are preserved on Kindle in `koreader/settings/reade
 Automatic iCloud/folder snapshots include reading positions along with highlights, dates and covers. A snapshot containing positions uses backup format version 2 and requires Reader Bridge 0.6.0 or later to restore. Version 1 highlight-only snapshots remain supported. Credentials are excluded from snapshots; reconnect readers after restoring onto another Mac. Restore adds missing positions and preserves current ones.
 
 Pairing saves old device configuration files in the Mac's private Reader Bridge backups directory before replacing them. Original book files and their local reading positions are not edited. Existing queued KOReader positions are merged using their recorded queue times, then removed from the old queue only after being stored locally; the old queue is backed up. Re-pairing the same local account preserves pending queue entries. Readers configured with different old accounts must be reconciled before automatic migration.
+
+**Use Wi-Fi with older firmware** is available for first-time setup on firmware that permits it. A protected-file response (HTTP 403), or an existing config needing an update, requires USB/SD provisioning instead. Turn off that option, choose the mounted reader folder, and reconnect. Passage retains the previous settings and pairing on these failures; do not delete `.crosspoint` or disable firmware protection. The JSON command `pair_progress_xteink` accepts `mount` for the USB/SD folder; `device_url` is the legacy Wi-Fi option.
 
 Turning off position sync stops its background job and retains the position database and credentials. It does not silently switch the readers back to a public server. Turn it on again to resume with the same account. Keep the app at its installed location because the background jobs use its bundled interpreter.
 

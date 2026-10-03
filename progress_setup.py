@@ -1,5 +1,6 @@
 """Desktop lifecycle and reversible reader pairing for local progress sync."""
 from datetime import datetime, timezone
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -13,6 +14,11 @@ import lua_settings
 import progress_sync
 import setup
 import device_profiles
+
+
+PROTECTED_PROGRESS_SETTINGS = ('Your reader protects progress settings from Wi-Fi transfer. '
+                               'Connect it in USB drive mode or insert its SD card, then reconnect here. '
+                               'Existing settings and pairing are kept.')
 
 
 def book_documents(mount):
@@ -180,7 +186,9 @@ class ProgressSetup:
         progress_sync.Store(self.progress_directory()/'positions.sqlite3').seed(rows.values(), newer=True)
         return queue_path if queue_path.is_file() else None
 
-    def pair_progress_kindle(self, mount):
+    def pair_progress_kindle(self, mount, auto_sync=None):
+        if auto_sync is not None and not isinstance(auto_sync, bool):
+            raise setup.SetupError('Automatic sync must be true or false.')
         endpoint = self.paired_progress_endpoint()
         mount = setup.guarded(Path(mount).expanduser())
         root = next((p for p in [mount/'koreader',mount/'.adds/koreader'] if (p/'reader.lua').is_file()),None)
@@ -210,9 +218,19 @@ class ProgressSetup:
         account = self.progress_account()
         settings = previous['settings']
         settings.update(custom_server=endpoint, username=account['username'], userkey=progress_sync.auth_headers(account)['x-auth-key'], checksum_method=0, send_metadata=True)
-        settings.setdefault('auto_sync', True)
+        if auto_sync is not None:
+            settings['auto_sync'] = auto_sync
+        else:
+            settings.setdefault('auto_sync', True)
         settings.setdefault('sync_forward',1); settings.setdefault('sync_backward',1)
         updates = [(path,lua_settings.dumps(previous).encode())]
+        # KOSync disables auto_sync at startup unless this prerequisite is set.
+        # Match its own Auto sync flow: allow Wi-Fi when needed, without enabling
+        # periodic syncing or changing disconnect/suspend preferences.
+        if settings['auto_sync'] and reader_settings.get('wifi_enable_action') != 'turn_on':
+            reader_settings['wifi_enable_action'] = 'turn_on'
+            updates.append((setup.guarded(root/'settings.reader.lua'),
+                            lua_settings.dumps(reader_settings).encode()))
         updates.append((setup.guarded(root/'settings/readerbridge-progress-config.lua'),
                         lua_settings.dumps({'version':1,'endpoint':endpoint,'username':account['username']}).encode()))
         for name in ('2-reader-bridge-progress.lua','readerbridge-api.json'):
@@ -248,11 +266,16 @@ class ProgressSetup:
         spec, client, mount = self.crosspoint_connection(model, mount, device_url)
         path = '/.crosspoint/koreader.json'
         if client:
-            old = client.read_file(path)
+            try: old = client.read_file(path)
+            except HTTPError as exc:
+                if exc.code == 403: raise setup.SetupError(PROTECTED_PROGRESS_SETTINGS) from exc
+                raise
         else:
             local = setup.guarded(mount/path.lstrip('/'))
             old = local.read_bytes() if local.is_file() else None
-        previous = json.loads(old) if old else {}
+        try: previous = json.loads(old) if old else {}
+        except (ValueError,UnicodeError) as exc:
+            raise setup.SetupError('Unrecognized Xteink settings. No reader files were changed.') from exc
         if not isinstance(previous,dict): raise setup.SetupError('Unrecognized Xteink settings. No reader files were changed.')
         account = self.progress_account()
         if previous.get('username'):
@@ -273,9 +296,37 @@ class ProgressSetup:
         previous.update(cfgVersion=2, username=account['username'], password=account['password'], serverUrl=endpoint,matchMethod=1,sendMetadata=True)
         previous.setdefault('syncBehavior',0)
         data = (json.dumps(previous,indent=2)+'\n').encode()
-        if client: client.put_file(path,data,old)
-        else: self.install_file(local,data)
-        # Firmware imports the legacy password field and resaves it obfuscated.
-        self.state['progress_sync']['xteink'] = {'model':model, 'url':device_url or '', 'endpoint':endpoint, 'paired_at':datetime.now(timezone.utc).isoformat()}
-        self.state['progress_sync']['verified'] = False
-        self.save()
+        if client and old is not None and old != data:
+            # The legacy web API deletes before uploading and cannot restore
+            # an existing account reliably if the connection drops afterward.
+            raise setup.SetupError('Connect in USB drive mode or insert the SD card to update existing progress settings safely. Existing settings and pairing are kept.')
+        saved_state = copy.deepcopy(self.state)
+        saved_file = self.state_path.read_bytes() if self.state_path.is_file() else None
+        record_changed = False
+        try:
+            if client:
+                try: client.put_file(path,data,old)
+                except HTTPError as exc:
+                    if exc.code == 403: raise setup.SetupError(PROTECTED_PROGRESS_SETTINGS) from exc
+                    raise
+            else: self.install_file(local,data)
+            # Firmware imports the legacy password field and resaves it obfuscated.
+            record_changed = True
+            self.state['progress_sync']['xteink'] = {'model':model, 'url':device_url or '', 'endpoint':endpoint, 'paired_at':datetime.now(timezone.utc).isoformat()}
+            self.state['progress_sync']['verified'] = False
+            self.save()
+        except BaseException:
+            self.state = saved_state
+            if not client:
+                try:
+                    if old is not None: setup.atomic_write(local,old)
+                    else: local.unlink(missing_ok=True)
+                except (OSError,setup.SetupError):
+                    raise setup.SetupError('Progress setup could not finish or restore reader settings. Keep the USB/SD connection and the private Mac backups for recovery.')
+            if record_changed:
+                try:
+                    if saved_file is not None: setup.atomic_write(self.state_path,saved_file)
+                    else: self.state_path.unlink(missing_ok=True)
+                except (OSError,setup.SetupError):
+                    raise setup.SetupError('Progress setup could not finish or restore its pairing record. Your saved positions and private backups are kept; reconnect using USB or the SD card.')
+            raise

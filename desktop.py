@@ -743,7 +743,8 @@ class Desktop(ProgressSetup, setup.Bridge):
         elif command == 'stop_progress':
             self.stop_progress()
         elif command == 'pair_progress_kindle':
-            self.pair_progress_kindle(text_arg(args.get('mount'), 'Kindle volume'))
+            self.pair_progress_kindle(text_arg(args.get('mount'), 'Kindle volume'),
+                                     bool_arg(args['auto_sync'], 'auto_sync') if 'auto_sync' in args else None)
         elif command == 'pair_progress_xteink':
             self.pair_progress_xteink(args.get('mount'), args.get('device_url'), text_arg(args.get('model'), 'CrossPoint model'))
         elif command == 'verify_local_progress':

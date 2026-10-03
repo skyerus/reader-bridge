@@ -131,8 +131,9 @@ with reading positions deferred. Prerequisite guides remain in the relevant
 reader step; a second reader can be added later.
 
 The candidate pins CrossPoint source
-`d03f6e6a2afbdbdf99d35fcb91d35a847166f514`, including the cover and highlight
-changes. All five build environments completed with PlatformIO 6.1.19,
+`d03f6e6a2afbdbdf99d35fcb91d35a847166f514`, including highlight changes.
+Fresh-reader testing on 2026-10-03 showed that this pin omitted the cover
+uploader; earlier cover tests used a separate development image. All five build environments completed with PlatformIO 6.1.19,
 producing verified images for six profiles: Xteink X3, X4, X4 Pro, X4 Classic,
 Sticky and M5Stack Paper Mono. Source, dependency notices and image checksums
 are packaged with the firmware. Compilation does not establish physical
@@ -148,3 +149,53 @@ the packaged app on Apple Silicon and Intel. A development disk image is not a
 consumer release. Developer ID signing, accepted Apple notarization, a clean-Mac
 walkthrough and exact-artifact physical-reader evidence are required by the
 [release process](RELEASING.md) before publishing a supported installer.
+
+
+## Fresh-reader regression fixes (2026-10-03)
+
+A fresh KOReader installation on a jailbroken Paperwhite 5 and a clean CrossPoint
+setup on an X4 Pro received highlights automatically. The bundled Xteink image
+failed to upload its cover and rejected local HTTP progress sync with a low-memory
+error. These results are failures of the release candidate, not completed
+physical acceptance.
+
+The replacement source includes original-cover upload and applies the existing
+TLS heap thresholds only to HTTPS connections. Queued artwork lives outside
+reader caches, and cancellation stops the finite upload stream. Firmware
+packaging rejects images missing the highlight and cover protocol markers.
+Those marker checks catch missing features; they do not prove runtime behavior.
+
+Current upstream protects progress credentials from Wi-Fi file access. Desktop
+pairing now uses USB/SD by default, explains a protected-file response, and keeps
+previous settings when setup fails. Physical retesting and restoration of the
+original reader setup remain required before recording acceptance.
+
+## Fresh reader retest and cover memory fix (2026-10-03)
+
+A Paperwhite 5 running firmware 5.19.2 was tested with a clean KOReader
+installation while retaining its existing jailbreak. An Xteink X4 Pro was
+tested with clean CrossPoint settings and books. Personal data and original
+firmware were backed up and retained separately. This does not establish
+that jailbreaking a stock Kindle is automatic or supported on every firmware.
+
+The physical test confirmed dated highlights from both readers, original-colour
+cover upload, and reading-position exchange in both directions. A separate book
+installed only on the Xteink proved that its cover association came from that
+reader; the received JPEG matched the EPUB image byte for byte. Opening the
+book triggered cover delivery without a manual Sync command.
+
+Serial diagnostics exposed a fragmented-heap failure allocating the inflater's
+32 KB window during cover extraction. Firmware now lends the existing
+framebuffer under the render lock, restores it, and redraws the page. It adds no
+permanent buffer or Wi-Fi polling. The X4 Pro build and 502 host tests passed;
+other board profiles still require their own physical acceptance.
+
+Deleting a Kindle test highlight and closing its book automatically delivered
+the deletion, without pressing Sync. The Xteink also delivered its queued
+deletion after returning to the book. Serial diagnostics showed why delivery
+had stalled on Home: its temporary cover cache left less free memory than the
+uploader requires. The firmware now releases rebuildable display caches only
+when queued work needs the space, then rechecks the unchanged memory budget.
+This adds no permanent buffer or network polling. The X4 Pro build and 502 host
+tests passed; the Home-screen physical retest and original-setup restoration
+remain pending.

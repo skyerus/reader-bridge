@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+REQUIRED_PROTOCOL_MARKERS = (b'/v1/highlights', b'/v1/covers', b'X-Book-Title', b'X-Book-Author')
 
 
 def run(*args, **kwargs):
@@ -248,6 +249,12 @@ def assemble(args):
                 header = stream.read(24)
             if not 24 < size <= 32 * 1024 * 1024 or header[0] != 0xE9 or int.from_bytes(header[12:14], 'little') != spec['chip_id']:
                 raise ValueError(f'Invalid application firmware for {model}')
+            # A valid ESP32 image can still predate Passage's cover uploader.
+            # Check the built image, not source files that may compile unused.
+            image = binary.read_bytes()
+            missing = [marker.decode('ascii') for marker in REQUIRED_PROTOCOL_MARKERS if marker not in image]
+            if missing:
+                raise ValueError(f'Firmware for {model} lacks required Passage protocol markers: {", ".join(missing)}')
             relative = Path('desktop/firmware') / spec['filename']
             target = stage / relative
             target.parent.mkdir(parents=True, exist_ok=True)

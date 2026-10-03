@@ -17,9 +17,10 @@ struct ReadingProgressView: View {
     private var crossPointPaired: Bool { progress?.xteinkPaired == true && (progress?.xteinkModel ?? BridgeStatus.SupportedDevice.legacyX4Pro.id) == selectedModel }
     private var configured: Bool { progress?.isConfigured(for: choice, crosspointModel: choice.includesCrossPoint ? selectedModel : nil) == true }
     @State private var kindleMount = ""
+    @State private var kindleAutoSync = true
     @State private var xteinkMount = ""
     @State private var deviceURL = ""
-    @State private var useCard = false
+    @State private var useWiFi = false
     private var progress: BridgeStatus.LocalProgress? { status.localProgress }
     private var canConnectReader: Bool { SetupInput.canConnectReadingPositions(progress) }
     private var ready: Bool { canConnectReader && progress?.error.isEmpty == true }
@@ -95,22 +96,26 @@ struct ReadingProgressView: View {
                 Label(progress?.kindlePaired == true ? "Kindle settings saved" : "Connect your Kindle", systemImage: progress?.kindlePaired == true ? "checkmark.circle" : "cable.connector")
                     .font(.headline)
                 Text("Close KOReader and connect by USB.").font(.callout).foregroundStyle(.secondary)
+                Toggle("Sync automatically", isOn: $kindleAutoSync).font(.callout)
+                if kindleAutoSync {
+                    Text("KOReader turns Wi-Fi on when needed.").font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     TextField("Kindle USB folder", text: $kindleMount).textFieldStyle(.roundedBorder)
                     Button("Choose…") { if let path = chooseFolder() { kindleMount = path } }
                     Button(progress?.kindlePaired == true ? "Reconnect Kindle" : "Connect Kindle") {
-                        Task { await model.perform("pair_progress_kindle", ["mount": kindleMount], activity: "Copying positions and connecting Kindle…", success: "Kindle settings saved. Eject it and reopen KOReader.") }
+                        Task { await model.perform("pair_progress_kindle", ["mount": kindleMount, "auto_sync": kindleAutoSync], activity: "Copying positions and connecting Kindle…", success: "Kindle settings saved. Eject it and reopen KOReader.") }
                     }.disabled(!canConnectReader || kindleMount.isEmpty)
                 }
             }
             if choice.includesCrossPoint {
                 Divider()
-                Label(crossPointPaired ? "\(deviceName) settings saved" : "Connect \(deviceName)", systemImage: crossPointPaired ? "checkmark.circle" : "wifi")
+                Label(crossPointPaired ? "\(deviceName) settings saved" : "Connect \(deviceName)", systemImage: crossPointPaired ? "checkmark.circle" : "cable.connector")
                     .font(.headline)
-                Text(useCard ? "Insert your reader’s SD card into your Mac." : "Open File Transfer on your reader, then enter its address.").font(.callout).foregroundStyle(.secondary)
+                Text(useWiFi ? "First setup on older firmware: open File Transfer, then enter its address. Existing or protected settings need USB or the SD card." : "Connect the reader in USB drive mode, or insert its SD card into your Mac. Choose the mounted reader folder.").font(.callout).foregroundStyle(.secondary)
                 HStack {
-                    if useCard {
-                        TextField("Reader SD card folder", text: $xteinkMount).textFieldStyle(.roundedBorder)
+                    if !useWiFi {
+                        TextField("Reader USB / SD card folder", text: $xteinkMount).textFieldStyle(.roundedBorder)
                         Button("Choose…") { if let path = chooseFolder() { xteinkMount = path } }
                     } else {
                         TextField("http://192.168.1.42", text: $deviceURL).textFieldStyle(.roundedBorder).accessibilityLabel("CrossPoint File Transfer address")
@@ -118,12 +123,12 @@ struct ReadingProgressView: View {
                     Button(crossPointPaired ? "Reconnect reader" : "Connect reader") {
                         Task {
                             var parameters: [String: Any] = ["model": selectedModel]
-                            parameters[useCard ? "mount" : "device_url"] = useCard ? xteinkMount : deviceURL
-                            await model.perform("pair_progress_xteink", parameters, activity: "Connecting reader positions…", success: "Reader settings saved. Restart the reader to apply them.")
+                            parameters[useWiFi ? "device_url" : "mount"] = useWiFi ? deviceURL : xteinkMount
+                            await model.perform("pair_progress_xteink", parameters, activity: "Connecting reader positions…", success: useWiFi ? "Reader settings saved. Leave File Transfer and restart the reader." : "Reader settings saved. Eject the reader or card, then restart the reader.")
                         }
-                    }.disabled(!canConnectReader || selectedDevice?.pairingSupported != true || selectedDevice?.capabilities.progress != true || (useCard ? xteinkMount.isEmpty : !SetupInput.validLANAddress(deviceURL)))
+                    }.disabled(!canConnectReader || selectedDevice?.pairingSupported != true || selectedDevice?.capabilities.progress != true || (useWiFi ? !SetupInput.validLANAddress(deviceURL) : xteinkMount.isEmpty))
                 }
-                Toggle("Use its SD card instead", isOn: $useCard).font(.caption)
+                Toggle("Use Wi-Fi with older firmware", isOn: $useWiFi).font(.caption)
             }
         }
     }
