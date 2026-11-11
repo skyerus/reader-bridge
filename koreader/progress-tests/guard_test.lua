@@ -33,7 +33,7 @@ function Client:update_progress(_,_,document,metadata,progress,percentage,device
         device=device,device_id=device_id,callback=callback,spec=self.service_spec}
 end
 local patch
-local modules={datastorage={getSettingsDir=function() return '/fixture/settings' end},
+local modules={device={isKindle=function() return false end},datastorage={getSettingsDir=function() return '/fixture/settings' end},
     luasettings=Storage,['ui/uimanager']=UI,optmath={roundPercent=function(p) return p end},
     userpatch={registerPatchPluginFunc=function(_,fn) patch=fn end},KOSyncClient=Client,KOSyncQueue=Queue}
 for name,module in pairs(modules) do package.preload[name]=function() return module end end

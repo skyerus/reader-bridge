@@ -1,5 +1,5 @@
 local patchfile=assert(arg[1]);local native=assert(arg[2]);local quietpatch=arg[3]
-local scheduled,patch,clock={},nil,1000
+local scheduled,patches,clock={},{},1000
 local config={version=1,endpoint='http://192.168.1.20:8085',username='fixture'}
 local files={}
 local stores={open=function(_,path)
@@ -46,14 +46,16 @@ local modules={
  optmath={roundPercent=function(p)return math.floor(p*10000)/10000 end},
  ['ffi/sha2']={md5=function(s)return s end},['ui/time']={s=function(n)return n end},
  util={splitFilePathName=function(p)return '',p end},['ffi/util']={template=function(s)return s end},gettext=function(s)return s end,
- userpatch={registerPatchPluginFunc=function(_,fn)patch=fn end},KOSyncQueue=Queue,
+ userpatch={registerPatchPluginFunc=function(_,fn)patches[#patches+1]=fn end},KOSyncQueue=Queue,
  socketutil={set_timeout=no,reset_timeout=no},Spore=Spore,
 }
 for name,m in pairs(modules)do package.preload[name]=function()return m end end
 package.preload.KOSyncClient=function()return dofile(native..'/KOSyncClient.lua')end
 local Plugin=dofile(native..'/main.lua')
-dofile(patchfile);patch(Plugin)
-if quietpatch then dofile(quietpatch);patch(Plugin) end
+dofile(patchfile)
+if quietpatch and quietpatch ~= 'bootstrap' then dofile(quietpatch) end
+if quietpatch == 'bootstrap' then assert(#patches == 2, 'progress startup did not register quiet Wi-Fi') end
+for _, patch in ipairs(patches) do patch(Plugin) end
 local owner=setmetatable({settings={username='fixture',userkey='hash',custom_server=config.endpoint,send_metadata=true,sync_forward=2,sync_backward=1},
  path=native,device_id='kindle',position='original',percentage=.3,push_timestamp=0,pull_timestamp=0,last_page_turn_timestamp=0,
  view={document={file='fixture.epub'}},ui={document={file='fixture.epub',info={has_pages=false}},doc_props={display_title='Fixture',authors='Author'}}}, {__index=Plugin})

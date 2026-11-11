@@ -6,6 +6,9 @@ if not Device:isKindle() or not Device:hasWifiRestore() then return end
 
 local NetworkMgr = require('ui/network/manager')
 local userpatch = require('userpatch')
+-- The progress entry point also loads this file. This flag is process-local,
+-- so every restart registers the hooks again, while normal discovery is harmless.
+if userpatch._passage_quiet_wifi_registered then return end
 
 userpatch.registerPatchPluginFunc('kosync', function(Plugin)
     local get, update = Plugin.getProgress, Plugin.updateProgress
@@ -99,3 +102,6 @@ userpatch.registerPatchPluginFunc('kosync', function(Plugin)
         return close(self, ...)
     end
 end)
+
+userpatch._passage_quiet_wifi_registered = true
+require('logger').info('Passage: quiet automatic Wi-Fi reconnect registered')

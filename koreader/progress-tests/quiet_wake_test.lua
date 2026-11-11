@@ -8,7 +8,7 @@ local Network = {isConnected=function() return online end,
     scheduleConnectivityCheck=function(self) self.pending_connectivity_check=true end,
     unscheduleConnectivityCheck=function(self) self.pending_connectivity_check=false end}
 G_reader_settings = {readSetting=function() return action end}
-local modules = {device=Device, ['ui/network/manager']=Network,
+local modules = {logger={info=function() end}, device=Device, ['ui/network/manager']=Network,
     userpatch={registerPatchPluginFunc=function(_,fn) patch=fn end},
     KOSyncQueue={push=function(_,item) queue[#queue+1]=item end}}
 for name,value in pairs(modules) do package.preload[name]=function() return value end end

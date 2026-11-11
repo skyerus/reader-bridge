@@ -13,7 +13,7 @@ Setup records the selected readers' pairings. **Readers paired** means settings 
 
 Keep **Sync automatically** selected when connecting Kindle to sync on book open/close and sleep/wake. Passage also sets KOReader's **Action when Wi-Fi is off** to **Turn on**, which KOReader requires for automatic sync. Uncheck it for manual sync. Pairing backs up these settings and leaves Wi-Fi disconnect and sleep preferences unchanged. CrossPoint's Upload Local and Apply Remote actions remain manual. Position sync does not add a polling loop, keep Wi-Fi continuously on, or create Amazon Whispersync compatibility.
 
-On Kindle, automatic progress sync uses the existing background reconnect when Wi-Fi is set to turn on automatically, including after an unsuccessful connection. It does not show the network-scan dialog on wake. Going to sleep offline saves progress to KOReader's queue on versions that support it; reconnecting sends the queued position with the usual conflict protection. Explicit sync and network actions retain KOReader's normal connection dialogs.
+On Kindle, automatic progress sync uses the existing background reconnect when Wi-Fi is set to turn on automatically, including after an unsuccessful connection. It does not show the network-scan dialog on wake. Going to sleep offline saves progress to KOReader's queue on versions that support it; reconnecting sends the queued position with the usual conflict protection. Explicit sync and network actions retain KOReader's normal connection dialogs. The progress patch explicitly loads its quiet-Wi-Fi companion on every KOReader startup; duplicate discovery is harmless. A successful registration is recorded in the KOReader log, and a missing or broken companion logs a warning.
 
 ## Daily use
 

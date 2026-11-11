@@ -242,3 +242,11 @@ userpatch.registerPatchPluginFunc('kosync', function(Plugin)
         end)
     end
 end)
+
+-- Keep the companion tied to this entry point: on-device logs showed it was
+-- skipped by later startup scans even though this progress patch still loaded.
+-- The companion guards duplicate discovery within the same KOReader process.
+local quiet_ok, quiet_error = pcall(dofile, directory .. '2-reader-bridge-quiet-wifi.lua')
+if not quiet_ok then
+    require('logger').warn('Passage: could not load quiet Wi-Fi companion:', quiet_error)
+end
