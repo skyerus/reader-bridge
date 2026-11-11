@@ -16,6 +16,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_PROTOCOL_MARKERS = (b'/v1/highlights', b'/v1/covers', b'X-Book-Title', b'X-Book-Author')
+PSRAM_ENVIRONMENTS = {'x4pro', 'x4c'}
+PSRAM_RUNTIME_SYMBOLS = ('esp_psram_init', 'esp_psram_extram_add_to_heap_allocator')
 
 
 def run(*args, **kwargs):
@@ -28,6 +30,29 @@ def digest(path):
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             checksum.update(block)
     return checksum.hexdigest()
+
+
+def verify_psram_runtime(binary, environment):
+    """Reject mixed SDK builds that declare PSRAM but omit its initialization."""
+    if environment not in PSRAM_ENVIRONMENTS:
+        return
+    linker_map = binary.with_suffix('.map')
+    if not linker_map.is_file():
+        raise ValueError(f'Missing linker map for {environment}; PSRAM initialization cannot be verified')
+    text = linker_map.read_text()
+    missing = []
+    for symbol in PSRAM_RUNTIME_SYMBOLS:
+        # Discarded sections also mention these names, with address zero. Only
+        # an assigned, nonzero symbol address proves code reached the image.
+        addresses = re.findall(r'^\s+0x([0-9a-fA-F]+)\s+' + re.escape(symbol) + r'\s*$', text, re.MULTILINE)
+        if not any(int(address, 16) for address in addresses):
+            missing.append(symbol)
+    if missing:
+        raise ValueError(
+            f'Firmware for {environment} lacks PSRAM initialization: {", ".join(missing)}. '
+            'Rebuild this profile with a clean, dedicated --platformio-core directory; '
+            'custom SDK builds can leave libraries that shadow the prebuilt PSRAM variant.'
+        )
 
 
 def tracked_files(source):
@@ -244,6 +269,7 @@ def assemble(args):
         receipt = {'schema_version': 1, 'source_commit': next(iter(commits)), 'submodules': submodules.splitlines(), 'environments': environments, 'platformio': version, 'build_succeeded': True, 'models': {}}
         for model, spec in zip(selected, specs):
             binary = source / '.pio/build' / spec['environment'] / 'firmware.bin'
+            verify_psram_runtime(binary, spec['environment'])
             size = binary.stat().st_size
             with binary.open('rb') as stream:
                 header = stream.read(24)

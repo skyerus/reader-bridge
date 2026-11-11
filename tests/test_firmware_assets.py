@@ -105,6 +105,40 @@ class FirmwareAssetsTests(unittest.TestCase):
             assets.assemble(self.args)
         self.assertFalse(self.args.output.exists())
 
+    def test_psram_profile_rejects_discarded_initialization_code(self):
+        binary = self.source / '.pio/build/x4pro/firmware.bin'
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(self.binary.read_bytes())
+        # This is the failed X4 Pro build's layout: names exist in the map,
+        # but their sections were discarded and no runtime address is assigned.
+        binary.with_suffix('.map').write_text(
+            ' .text.esp_psram_init\n                0x00000000 0x176 libesp_psram.a(esp_psram.c.obj)\n'
+            ' .text.esp_psram_extram_add_to_heap_allocator\n'
+            '                0x00000000 0x5e libesp_psram.a(esp_psram.c.obj)\n'
+        )
+        self.data['devices']['example_reader']['environment'] = 'x4pro'
+        self.manifest.write_text(json.dumps(self.data))
+        with self.assertRaisesRegex(ValueError, 'lacks PSRAM initialization'):
+            assets.assemble(self.args)
+        self.assertFalse(self.args.output.exists())
+        binary.with_suffix('.map').write_text(
+            '                0x42003100                esp_psram_init\n'
+            '                0x42003200                esp_psram_extram_add_to_heap_allocator\n'
+        )
+        assets.verify_psram_runtime(binary, 'x4pro')
+        assets.verify_psram_runtime(binary, 'x4c')
+
+    def test_psram_profile_requires_linker_map_and_nonzero_symbol_addresses(self):
+        with self.assertRaisesRegex(ValueError, 'Missing linker map'):
+            assets.verify_psram_runtime(self.binary, 'x4pro')
+        self.binary.with_suffix('.map').write_text(
+            '                0x00000000                esp_psram_init\n'
+            '                0x42003200                esp_psram_extram_add_to_heap_allocator\n'
+        )
+        with self.assertRaisesRegex(ValueError, 'esp_psram_init'):
+            assets.verify_psram_runtime(self.binary, 'x4c')
+        assets.verify_psram_runtime(self.binary, 'default')
+
     def test_highlights_only_firmware_cannot_package_without_cover_support(self):
         image = bytearray(256)
         image[0] = 0xE9
